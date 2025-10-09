@@ -1,41 +1,39 @@
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from xgboost import XGBClassifier
-from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from imblearn.over_sampling import SMOTE
 import pandas as pd
-
+import pickle
 import kagglehub
+
+# Load dataset
 adityakadiwal_water_potability_path = kagglehub.dataset_download('adityakadiwal/water-potability')
-
-print('Data source import complete.')
-
 df = pd.read_csv(adityakadiwal_water_potability_path + "/water_potability.csv")
 
-df.head(3)
-
-df.info()
-
+# Fill missing values
 df['ph'] = df['ph'].fillna(df['ph'].median())
 df['Sulfate'] = df['Sulfate'].fillna(df['Sulfate'].median())
 df['Trihalomethanes'] = df['Trihalomethanes'].fillna(df['Trihalomethanes'].median())
 
-df.info()
-
-df.head()
-
+# Scale features
 scaler = StandardScaler()
-cols = ['ph', 'Hardness', 'Solids', 'Chloramines', 'Sulfate', 'Conductivity', 'Organic_carbon', 'Trihalomethanes', 'Turbidity']
-for col in cols:
-  df[col] = scaler.fit_transform(df[col].values.reshape(-1, 1))
-df.head(2)
+cols = ['ph', 'Hardness', 'Solids', 'Chloramines', 'Sulfate',
+        'Conductivity', 'Organic_carbon', 'Trihalomethanes', 'Turbidity']
+df[cols] = scaler.fit_transform(df[cols])
 
+# Save the scaler
+with open('ai/scaler.pkl', 'wb') as f:
+    pickle.dump(scaler, f)
+
+# Prepare train-test
 X = df.drop('Potability', axis=1)
 y = df['Potability']
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 
+# Train model
 model = XGBClassifier(
     n_estimators=300,
     max_depth=6,
@@ -47,47 +45,22 @@ model = XGBClassifier(
     random_state=42
 )
 
-# model.fit(X_train, y_train)
-
-
 smote = SMOTE(random_state=42)
-
-
 X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
-
 model.fit(X_train_res, y_train_res)
 
+# Metrics
 y_pred = model.predict(X_test)
-
-accuracy = accuracy_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred)
-precision = precision_score(y_test, y_pred)
-recall = recall_score(y_test, y_pred)
-roc_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:,1])
-
-cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-scores = cross_val_score(model, X_train_res, y_train_res, cv=cv, scoring='f1')
-print("Accuracy: ", accuracy)
-print("F1 Score: ", f1)
-print("Precision: ", precision)
-print("Recall: ", recall)
-print("ROC-AUC:", roc_auc)
+print("Accuracy: ", accuracy_score(y_test, y_pred))
+print("F1 Score: ", f1_score(y_test, y_pred))
+print("Precision: ", precision_score(y_test, y_pred))
+print("Recall: ", recall_score(y_test, y_pred))
+print("ROC-AUC:", roc_auc_score(y_test, model.predict_proba(X_test)[:,1]))
+scores = cross_val_score(model, X_train_res, y_train_res, cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42), scoring='f1')
 print("Mean F1:", scores.mean())
 
-import pickle
+# Save the model
+with open('ai/water-potability-detection.pkl', 'wb') as f:
+    pickle.dump(model, f)
 
-pickle_filename = 'water-potability-detection.pkl'
-
-# Save the trained model to a pickle file
-with open(pickle_filename, 'wb') as file:
-    pickle.dump(model, file)
-
-print(f"Object successfully saved to {pickle_filename}")
-
-# Open the file in binary read mode ('rb') and load the object
-with open(pickle_filename, 'rb') as file:
-    loaded_data = pickle.load(file)
-
-print(f"Object successfully loaded from {pickle_filename}:")
-print(loaded_data)
-
+print("Model and scaler saved successfully.")
